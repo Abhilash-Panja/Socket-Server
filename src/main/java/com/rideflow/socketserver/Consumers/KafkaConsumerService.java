@@ -1,4 +1,4 @@
-package com.example.socketserver.Consumers;
+package com.rideflow.socketserver.Consumers;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
