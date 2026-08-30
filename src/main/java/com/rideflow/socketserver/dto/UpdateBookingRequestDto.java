@@ -1,4 +1,4 @@
-package com.example.socketserver.dto;
+package com.rideflow.socketserver.dto;
 
 import lombok.*;
 

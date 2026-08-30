@@ -1,4 +1,4 @@
-package com.example.socketserver.dto;
+package com.rideflow.socketserver.dto;
 
 
 import com.rideflow.rideflowentityservice.models.BookingStatus;
