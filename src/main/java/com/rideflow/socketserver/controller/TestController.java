@@ -1,4 +1,4 @@
-package com.example.socketserver.controller;
+package com.rideflow.socketserver.controller;
 
 //@Controller
 //public class TestController {
