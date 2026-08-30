@@ -1,4 +1,4 @@
-package com.example.socketserver.models;
+package com.rideflow.socketserver.models;
 
 import org.springframework.stereotype.Component;
 
