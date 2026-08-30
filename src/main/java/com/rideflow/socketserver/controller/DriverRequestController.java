@@ -1,11 +1,12 @@
-package com.example.socketserver.controller;
+package com.rideflow.socketserver.controller;
 
 
-import com.example.socketserver.Producers.KafkaProducerService;
-import com.example.socketserver.dto.RideRequestDto;
-import com.example.socketserver.dto.RideResponseDto;
-import com.example.socketserver.dto.UpdateBookingRequestDto;
-import com.example.socketserver.dto.UpdateBookingResponseDto;
+
+import com.rideflow.socketserver.Producers.KafkaProducerService;
+import com.rideflow.socketserver.dto.RideRequestDto;
+import com.rideflow.socketserver.dto.RideResponseDto;
+import com.rideflow.socketserver.dto.UpdateBookingRequestDto;
+import com.rideflow.socketserver.dto.UpdateBookingResponseDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
