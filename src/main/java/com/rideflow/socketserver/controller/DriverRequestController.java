@@ -3,6 +3,7 @@ package com.rideflow.socketserver.controller;
 
 
 import com.rideflow.socketserver.Producers.KafkaProducerService;
+import com.rideflow.socketserver.dto.RideAcceptanceResponseDto;
 import com.rideflow.socketserver.dto.RideRequestDto;
 import com.rideflow.socketserver.dto.RideResponseDto;
 import com.rideflow.socketserver.dto.UpdateBookingRequestDto;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
@@ -55,9 +57,10 @@ public class DriverRequestController {
     }
 
     @MessageMapping("/rideResponse/{userId}")
-    public synchronized void rideResponseHandler(@DestinationVariable String userId, RideResponseDto rideResponseDto) {
+    @SendToUser(value = "/queue/rideResponse", broadcast = false)
+    public synchronized RideAcceptanceResponseDto rideResponseHandler(@DestinationVariable String userId, RideResponseDto rideResponseDto) {
 
-        System.out.println(rideResponseDto.getResponse() +" "+userId);
+        System.out.println(rideResponseDto.getResponse() + " " + userId);
         UpdateBookingRequestDto requestDto = UpdateBookingRequestDto.builder()
                 .driverId(Optional.of(Long.parseLong(userId)))
                 .status("SCHEDULED")
@@ -65,5 +68,25 @@ public class DriverRequestController {
         ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity("http://localhost:8001/api/v1/booking/" + rideResponseDto.bookingId, requestDto, UpdateBookingResponseDto.class);
         kafkaProducerService.publishMessage("sample-topic", "Hello");
         System.out.println(result.getStatusCode());
+
+        UpdateBookingResponseDto bookingResponse = result.getBody();
+        if (bookingResponse == null) {
+            throw new IllegalStateException("BookingService returned an empty response");
+        }
+
+        RideAcceptanceResponseDto reply = RideAcceptanceResponseDto.builder()
+                .bookingId(bookingResponse.getBookingId())
+                .driverId(bookingResponse.getDriver()
+                        .map(driver -> driver.getId())
+                        .orElse(null))
+                .status(bookingResponse.getStatus())
+                .build();
+
+        System.out.println(
+                "RIDE_REPLY: DTO built for booking "
+                        + bookingResponse.getBookingId()
+        );
+
+        return reply;
     }
 }

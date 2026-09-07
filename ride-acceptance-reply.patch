@@ -1,0 +1,69 @@
+diff --git a/src/main/java/com/rideflow/socketserver/controller/DriverRequestController.java b/src/main/java/com/rideflow/socketserver/controller/DriverRequestController.java
+--- a/src/main/java/com/rideflow/socketserver/controller/DriverRequestController.java
++++ b/src/main/java/com/rideflow/socketserver/controller/DriverRequestController.java
+@@ -11,6 +11,7 @@
+ 
+ 
+ import com.rideflow.socketserver.Producers.KafkaProducerService;
++import com.rideflow.socketserver.dto.RideAcceptanceResponseDto;
+ import com.rideflow.socketserver.dto.RideRequestDto;
+ import com.rideflow.socketserver.dto.RideResponseDto;
+ import com.rideflow.socketserver.dto.UpdateBookingRequestDto;
+@@ -20,6 +21,7 @@
+ import org.springframework.messaging.handler.annotation.DestinationVariable;
+ import org.springframework.messaging.handler.annotation.MessageMapping;
+ import org.springframework.messaging.simp.SimpMessagingTemplate;
++import org.springframework.messaging.simp.annotation.SendToUser;
+ import org.springframework.web.bind.annotation.*;
+ import org.springframework.web.client.RestTemplate;
+ 
+@@ -86,7 +88,8 @@
+     }
+ 
+     @MessageMapping("/rideResponse/{userId}")
+-    public synchronized void rideResponseHandler(@DestinationVariable String userId, RideResponseDto rideResponseDto) {
++    @SendToUser(value = "/queue/rideResponse", broadcast = false)
++    public synchronized RideAcceptanceResponseDto rideResponseHandler(@DestinationVariable String userId, RideResponseDto rideResponseDto) {
+ 
+         System.out.println(rideResponseDto.getResponse() +" "+userId);
+         UpdateBookingRequestDto requestDto = UpdateBookingRequestDto.builder()
+@@ -96,5 +99,18 @@
+         ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity("http://localhost:8001/api/v1/booking/" + rideResponseDto.bookingId, requestDto, UpdateBookingResponseDto.class);
+         kafkaProducerService.publishMessage("sample-topic", "Hello");
+         System.out.println(result.getStatusCode());
++
++        UpdateBookingResponseDto bookingResponse = result.getBody();
++        if (bookingResponse == null) {
++            throw new IllegalStateException("BookingService returned an empty response");
++        }
++
++        return RideAcceptanceResponseDto.builder()
++                .bookingId(bookingResponse.getBookingId())
++                .driverId(bookingResponse.getDriver()
++                        .map(driver -> driver.getId())
++                        .orElse(null))
++                .status(bookingResponse.getStatus())
++                .build();
+     }
+ }
+diff --git a/src/main/java/com/rideflow/socketserver/dto/RideAcceptanceResponseDto.java b/src/main/java/com/rideflow/socketserver/dto/RideAcceptanceResponseDto.java
+new file mode 100644
+--- /dev/null
++++ b/src/main/java/com/rideflow/socketserver/dto/RideAcceptanceResponseDto.java
+@@ -0,0 +1,16 @@
++package com.rideflow.socketserver.dto;
++
++import com.rideflow.rideflowentityservice.models.BookingStatus;
++import lombok.*;
++
++@Getter
++@Setter
++@Builder
++@AllArgsConstructor
++@NoArgsConstructor
++public class RideAcceptanceResponseDto {
++
++    private Long bookingId;
++    private Long driverId;
++    private BookingStatus status;
++}
