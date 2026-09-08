@@ -42,22 +42,17 @@ It also processes driver responses, updates Booking Service, and sends a per-use
 ```mermaid
 flowchart LR
     Booking[Booking Service]
-    Socket[Socket Server<br/>:3002]
+    Socket["Socket Server<br/>:3002"]
     Driver[Driver Client]
-    Eureka[Eureka<br/>:8761]
+    Eureka["Eureka<br/>:8761"]
     Kafka[(Kafka)]
     MySQL[(MySQL)]
 
-    Booking -->|POST /api/socket/newride| Socket
-
-    Socket -->|/topic/rideRequest| Driver
-
-    Driver -->|/app/rideResponse/{driverId}| Socket
-
-    Socket -->|Update Booking| Booking
-
-    Socket -->|/user/queue/rideResponse| Driver
-
+    Booking -->|"POST /api/socket/newride"| Socket
+    Socket -->|"/topic/rideRequest"| Driver
+    Driver -->|"/app/rideResponse/{driverId}"| Socket
+    Socket -->|"Update Booking"| Booking
+    Socket -->|"/user/queue/rideResponse"| Driver
     Socket --> Kafka
     Socket --> MySQL
     Socket --> Eureka
