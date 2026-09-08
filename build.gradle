@@ -64,7 +64,7 @@ dependencies {
     // RideFlow Entity Service
     // ============================================================
 
-    implementation 'com.rideflow:Rideflow-EntityService:0.0.5-SNAPSHOT'
+    implementation 'com.rideflow:Rideflow-EntityService:0.0.7-SNAPSHOT'
 
 
     // ============================================================
