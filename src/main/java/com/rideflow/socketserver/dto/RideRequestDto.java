@@ -1,7 +1,8 @@
 package com.rideflow.socketserver.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.util.List;
@@ -13,18 +14,15 @@ import java.util.List;
 @Builder
 public class RideRequestDto {
 
-    @Schema(description = "Broadcast unchanged; not validated and not looked up in a database.", requiredMode = Schema.RequiredMode.NOT_REQUIRED, example = "101")
+    @NotNull
+    @Schema(description = "Passenger who requested the ride.", requiredMode = Schema.RequiredMode.REQUIRED, example = "101")
     private Long passengerId;
 
-//    private ExactLocation startLocation;
-//
-//    private ExactLocation endLocation;
-
-    @Schema(description = "Accepted but not used to select recipients. Broadcast goes to every /topic/rideRequest subscriber.", requiredMode = Schema.RequiredMode.NOT_REQUIRED, example = "[201]")
+    @NotEmpty
+    @Schema(description = "Only these drivers receive the ride request. Each driver subscribes to /topic/rideRequest/{driverId}.", requiredMode = Schema.RequiredMode.REQUIRED, example = "[201, 202]")
     private List<Long> driverIds;
 
-    @Schema(description = "Broadcast unchanged. Clients need a real booking ID for a later ride response, but this REST operation does not check it.", requiredMode = Schema.RequiredMode.NOT_REQUIRED, example = "401")
+    @NotNull
+    @Schema(description = "Booking linked to the ride request.", requiredMode = Schema.RequiredMode.REQUIRED, example = "401")
     private Long bookingId;
 }
-
-
