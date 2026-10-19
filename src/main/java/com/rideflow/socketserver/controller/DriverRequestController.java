@@ -27,7 +27,6 @@ import jakarta.validation.Valid;
 import com.netflix.discovery.EurekaClient;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Optional;
 
 @Tag(name = "Socket REST bridge")
 @RestController
@@ -102,14 +101,13 @@ public class DriverRequestController {
 
         System.out.println(rideResponseDto.getResponse() + " " + userId);
         UpdateBookingRequestDto requestDto = UpdateBookingRequestDto.builder()
-                .driverId(Optional.of(Long.parseLong(userId)))
+                .driverId(Long.parseLong(userId))
                 .status("SCHEDULED")
                 .build();
         ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity(
                 getBookingServiceUrl() + "/api/v1/booking/" + rideResponseDto.bookingId,
                 requestDto,
                 UpdateBookingResponseDto.class);
-        kafkaProducerService.publishMessage("sample-topic", "Hello");
         System.out.println(result.getStatusCode());
 
         UpdateBookingResponseDto bookingResponse = result.getBody();
@@ -119,9 +117,9 @@ public class DriverRequestController {
 
         RideAcceptanceResponseDto reply = RideAcceptanceResponseDto.builder()
                 .bookingId(bookingResponse.getBookingId())
-                .driverId(bookingResponse.getDriver()
-                        .map(driver -> driver.getId())
-                        .orElse(null))
+                .driverId(bookingResponse.getDriver() == null
+                        ? null
+                        : bookingResponse.getDriver().getId())
                 .status(bookingResponse.getStatus())
                 .build();
 
