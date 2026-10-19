@@ -23,9 +23,10 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import com.netflix.discovery.EurekaClient;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Optional;
 
 @Tag(name = "Socket REST bridge")
 @RestController
@@ -35,12 +36,16 @@ public class DriverRequestController {
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final RestTemplate restTemplate;
 
+    private final EurekaClient eurekaClient;
     private final KafkaProducerService kafkaProducerService;
 
-
-    public DriverRequestController(SimpMessagingTemplate simpMessagingTemplate, KafkaProducerService kafkaProducerService) {
+    public DriverRequestController(
+            SimpMessagingTemplate simpMessagingTemplate,
+            EurekaClient eurekaClient,
+            KafkaProducerService kafkaProducerService) {
         this.simpMessagingTemplate = simpMessagingTemplate;
         this.restTemplate = new RestTemplate();
+        this.eurekaClient = eurekaClient;
         this.kafkaProducerService = kafkaProducerService;
     }
 
@@ -58,14 +63,14 @@ public class DriverRequestController {
         return true;
     }
 
-    @Operation(operationId = "SocketServer_raiseRideRequest", summary = "Broadcast a ride request to subscribers",
-            description = "Tests the REST-to-STOMP bridge that the distributed booking service invokes. DriverRequestController.raiseRideRequest -> sendDriversNewRideRequest -> SimpMessagingTemplate.convertAndSend(\"/topic/rideRequest\", requestDto). Returns Boolean.TRUE immediately. driverIds is not used for targeting. This call broadcasts to all subscribers and performs no booking/passenger/driver lookup; it does not create a booking or publish Kafka itself.")
+    @Operation(operationId = "SocketServer_raiseRideRequest", summary = "Send a ride request to selected drivers",
+            description = "Tests the REST-to-STOMP bridge used by Booking-Service. The request is sent to /topic/rideRequest/{driverId} for each nearby driver ID, so unrelated drivers do not receive it. This endpoint publishes a notification only; it does not create or update a booking.")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
             description = "JSON body is required by Spring MVC. Field descriptions distinguish service requirements from active validation.",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = com.rideflow.socketserver.dto.RideRequestDto.class),
                     examples = @ExampleObject(value = "{\n  \"passengerId\": 101,\n  \"driverIds\": [\n    201\n  ],\n  \"bookingId\": 401\n}")))
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Broadcast a ride request to subscribers completed on the controller success branch.",
+            @ApiResponse(responseCode = "200", description = "Send a ride request to selected drivers completed on the controller success branch.",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = Boolean.class), examples = @ExampleObject(value = "true"))),
             @ApiResponse(responseCode = "400", description = "Unreadable request JSON before invocation.",
                     content = @Content),
@@ -73,18 +78,22 @@ public class DriverRequestController {
                     content = @Content)
     })
     @PostMapping ("/newride")
-    @CrossOrigin(originPatterns = "*")
-    public ResponseEntity<Boolean> raiseRideRequest(@RequestBody RideRequestDto requestDto) {
-        System.out.println("request for rides received");
+    public ResponseEntity<Boolean> raiseRideRequest(@Valid @RequestBody RideRequestDto requestDto) {
         sendDriversNewRideRequest(requestDto);
-        System.out.println("Req completed");
-        return new ResponseEntity<>(Boolean.TRUE, HttpStatus.OK);
+        return ResponseEntity.ok(Boolean.TRUE);
     }
 
     public void sendDriversNewRideRequest(RideRequestDto requestDto) {
-        System.out.println("Executed periodic function");
-        // TODO: Ideally the request should only go to nearby drivers, but for simplicity we send it everyone
-        simpMessagingTemplate.convertAndSend("/topic/rideRequest", requestDto);
+        if (requestDto.getDriverIds() == null || requestDto.getDriverIds().isEmpty()) {
+            throw new IllegalArgumentException("At least one driver is required");
+        }
+
+        // Each driver listens to a topic containing its own ID. A ride request
+        // therefore reaches only the nearby drivers selected by Location-Service.
+        requestDto.getDriverIds().forEach(driverId ->
+                simpMessagingTemplate.convertAndSend(
+                        "/topic/rideRequest/" + driverId,
+                        requestDto));
     }
 
     @MessageMapping("/rideResponse/{userId}")
@@ -93,11 +102,13 @@ public class DriverRequestController {
 
         System.out.println(rideResponseDto.getResponse() + " " + userId);
         UpdateBookingRequestDto requestDto = UpdateBookingRequestDto.builder()
-                .driverId(Optional.of(Long.parseLong(userId)))
+                .driverId(Long.parseLong(userId))
                 .status("SCHEDULED")
                 .build();
-        ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity("http://localhost:8001/api/v1/booking/" + rideResponseDto.bookingId, requestDto, UpdateBookingResponseDto.class);
-        kafkaProducerService.publishMessage("sample-topic", "Hello");
+        ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity(
+                getBookingServiceUrl() + "/api/v1/booking/" + rideResponseDto.bookingId,
+                requestDto,
+                UpdateBookingResponseDto.class);
         System.out.println(result.getStatusCode());
 
         UpdateBookingResponseDto bookingResponse = result.getBody();
@@ -107,9 +118,9 @@ public class DriverRequestController {
 
         RideAcceptanceResponseDto reply = RideAcceptanceResponseDto.builder()
                 .bookingId(bookingResponse.getBookingId())
-                .driverId(bookingResponse.getDriver()
-                        .map(driver -> driver.getId())
-                        .orElse(null))
+                .driverId(bookingResponse.getDriver() == null
+                        ? null
+                        : bookingResponse.getDriver().getId())
                 .status(bookingResponse.getStatus())
                 .build();
 
@@ -119,5 +130,9 @@ public class DriverRequestController {
         );
 
         return reply;
+    }
+
+    private String getBookingServiceUrl() {
+        return eurekaClient.getNextServerFromEureka("BOOKINGSERVICE", false).getHomePageUrl();
     }
 }
