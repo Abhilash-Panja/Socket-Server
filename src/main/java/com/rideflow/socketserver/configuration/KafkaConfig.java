@@ -19,10 +19,10 @@ import java.util.Map;
 @EnableKafka
 public class KafkaConfig {
 
-    @Value("\${spring.kafka.bootstrap-servers}")
+    @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
-    @Value("\${spring.kafka.consumer.group-id:socket-server}")
+    @Value("${spring.kafka.consumer.group-id:socket-server}")
     private String consumerGroup;
 
     @Bean
@@ -55,7 +55,7 @@ public class KafkaConfig {
         Map<String, Object> props = new HashMap<>();
         props.put(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                "localhost:9092");
+                bootstrapServers);
         props.put(
                 ConsumerConfig.GROUP_ID_CONFIG,
                 consumerGroup);
