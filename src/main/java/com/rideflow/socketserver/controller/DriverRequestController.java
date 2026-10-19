@@ -23,6 +23,8 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import com.netflix.discovery.EurekaClient;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Optional;
@@ -35,12 +37,16 @@ public class DriverRequestController {
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final RestTemplate restTemplate;
 
+    private final EurekaClient eurekaClient;
     private final KafkaProducerService kafkaProducerService;
 
-
-    public DriverRequestController(SimpMessagingTemplate simpMessagingTemplate, KafkaProducerService kafkaProducerService) {
+    public DriverRequestController(
+            SimpMessagingTemplate simpMessagingTemplate,
+            EurekaClient eurekaClient,
+            KafkaProducerService kafkaProducerService) {
         this.simpMessagingTemplate = simpMessagingTemplate;
         this.restTemplate = new RestTemplate();
+        this.eurekaClient = eurekaClient;
         this.kafkaProducerService = kafkaProducerService;
     }
 
@@ -54,7 +60,6 @@ public class DriverRequestController {
     })
     @GetMapping
     public Boolean help() {
-        kafkaProducerService.publishMessage("sample-topic", "Hello");
         return true;
     }
 
@@ -73,18 +78,22 @@ public class DriverRequestController {
                     content = @Content)
     })
     @PostMapping ("/newride")
-    @CrossOrigin(originPatterns = "*")
-    public ResponseEntity<Boolean> raiseRideRequest(@RequestBody RideRequestDto requestDto) {
-        System.out.println("request for rides received");
+    public ResponseEntity<Boolean> raiseRideRequest(@Valid @RequestBody RideRequestDto requestDto) {
         sendDriversNewRideRequest(requestDto);
-        System.out.println("Req completed");
-        return new ResponseEntity<>(Boolean.TRUE, HttpStatus.OK);
+        return ResponseEntity.ok(Boolean.TRUE);
     }
 
     public void sendDriversNewRideRequest(RideRequestDto requestDto) {
-        System.out.println("Executed periodic function");
-        // TODO: Ideally the request should only go to nearby drivers, but for simplicity we send it everyone
-        simpMessagingTemplate.convertAndSend("/topic/rideRequest", requestDto);
+        if (requestDto.getDriverIds() == null || requestDto.getDriverIds().isEmpty()) {
+            throw new IllegalArgumentException("At least one driver is required");
+        }
+
+        // Each driver listens to a topic containing its own ID. A ride request
+        // therefore reaches only the nearby drivers selected by Location-Service.
+        requestDto.getDriverIds().forEach(driverId ->
+                simpMessagingTemplate.convertAndSend(
+                        "/topic/rideRequest/" + driverId,
+                        requestDto));
     }
 
     @MessageMapping("/rideResponse/{userId}")
@@ -96,7 +105,10 @@ public class DriverRequestController {
                 .driverId(Optional.of(Long.parseLong(userId)))
                 .status("SCHEDULED")
                 .build();
-        ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity("http://localhost:8001/api/v1/booking/" + rideResponseDto.bookingId, requestDto, UpdateBookingResponseDto.class);
+        ResponseEntity<UpdateBookingResponseDto> result = this.restTemplate.postForEntity(
+                getBookingServiceUrl() + "/api/v1/booking/" + rideResponseDto.bookingId,
+                requestDto,
+                UpdateBookingResponseDto.class);
         kafkaProducerService.publishMessage("sample-topic", "Hello");
         System.out.println(result.getStatusCode());
 
@@ -119,5 +131,9 @@ public class DriverRequestController {
         );
 
         return reply;
+    }
+
+    private String getBookingServiceUrl() {
+        return eurekaClient.getNextServerFromEureka("BOOKINGSERVICE", false).getHomePageUrl();
     }
 }
