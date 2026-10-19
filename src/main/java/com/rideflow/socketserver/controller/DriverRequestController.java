@@ -59,17 +59,18 @@ public class DriverRequestController {
     })
     @GetMapping
     public Boolean help() {
+        kafkaProducerService.publishMessage("sample-topic", "Hello");
         return true;
     }
 
-    @Operation(operationId = "SocketServer_raiseRideRequest", summary = "Broadcast a ride request to subscribers",
-            description = "Tests the REST-to-STOMP bridge that the distributed booking service invokes. DriverRequestController.raiseRideRequest -> sendDriversNewRideRequest -> SimpMessagingTemplate.convertAndSend(\"/topic/rideRequest\", requestDto). Returns Boolean.TRUE immediately. driverIds is not used for targeting. This call broadcasts to all subscribers and performs no booking/passenger/driver lookup; it does not create a booking or publish Kafka itself.")
+    @Operation(operationId = "SocketServer_raiseRideRequest", summary = "Send a ride request to selected drivers",
+            description = "Tests the REST-to-STOMP bridge used by Booking-Service. The request is sent to /topic/rideRequest/{driverId} for each nearby driver ID, so unrelated drivers do not receive it. This endpoint publishes a notification only; it does not create or update a booking.")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
             description = "JSON body is required by Spring MVC. Field descriptions distinguish service requirements from active validation.",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = com.rideflow.socketserver.dto.RideRequestDto.class),
                     examples = @ExampleObject(value = "{\n  \"passengerId\": 101,\n  \"driverIds\": [\n    201\n  ],\n  \"bookingId\": 401\n}")))
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Broadcast a ride request to subscribers completed on the controller success branch.",
+            @ApiResponse(responseCode = "200", description = "Send a ride request to selected drivers completed on the controller success branch.",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = Boolean.class), examples = @ExampleObject(value = "true"))),
             @ApiResponse(responseCode = "400", description = "Unreadable request JSON before invocation.",
                     content = @Content),
